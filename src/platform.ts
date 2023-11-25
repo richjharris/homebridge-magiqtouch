@@ -1,4 +1,12 @@
-import { API, DynamicPlatformPlugin, Logger, PlatformAccessory, PlatformConfig, Service, Characteristic } from 'homebridge';
+import {
+  API,
+  DynamicPlatformPlugin,
+  Logger,
+  PlatformAccessory,
+  PlatformConfig,
+  Service,
+  Characteristic,
+} from 'homebridge';
 
 import { PLATFORM_NAME, PLUGIN_NAME } from './settings';
 import { MagIQTouchPlatformAccessory } from './platformAccessory';
@@ -41,7 +49,6 @@ export class MagIQTouchHomebridgePlatform implements DynamicPlatformPlugin {
       const devices = await this.magIQTouchService.getDevices();
       // loop over the discovered devices and register each one if it has not already been registered
       for (const device of devices) {
-
         // generate a unique id for the accessory this should be generated from
         // something globally unique, but constant, for example, the device serial
         // number or MAC address
@@ -49,12 +56,18 @@ export class MagIQTouchHomebridgePlatform implements DynamicPlatformPlugin {
 
         // see if an accessory with the same uuid has already been registered and restored from
         // the cached devices we stored in the `configureAccessory` method above
-        const existingAccessory = this.accessories.find(accessory => accessory.UUID === uuid);
+        const existingAccessory = this.accessories.find((accessory) => accessory.UUID === uuid);
 
         if (existingAccessory) {
           // the accessory already exists
-          this.log.info('Restoring existing accessory from cache:', existingAccessory.displayName, uuid);
-          existingAccessory.context.state = await this.magIQTouchService.getState(device.MacAddressId);
+          this.log.info(
+            'Restoring existing accessory from cache:',
+            existingAccessory.displayName,
+            uuid,
+          );
+          existingAccessory.context.state = await this.magIQTouchService.getState(
+            device.MacAddressId,
+          );
           existingAccessory.context.device = device;
 
           // create the accessory handler for the restored accessory
@@ -85,7 +98,7 @@ export class MagIQTouchHomebridgePlatform implements DynamicPlatformPlugin {
           this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
         }
       }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       this.log.error('Error loading devices', err.message || JSON.stringify(err));
     }

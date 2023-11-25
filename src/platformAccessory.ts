@@ -160,12 +160,10 @@ export class MagIQTouchPlatformAccessory {
       }
     }
     if (this.fanControlEnabled) {
-      this.fanService.getCharacteristic(
-        this.platform.Characteristic.RotationSpeed,
-      ).props.minValue = 0;
-      this.fanService.getCharacteristic(
-        this.platform.Characteristic.RotationSpeed,
-      ).props.maxValue = 100;
+      this.fanService.getCharacteristic(this.platform.Characteristic.RotationSpeed).props.minValue =
+        0;
+      this.fanService.getCharacteristic(this.platform.Characteristic.RotationSpeed).props.maxValue =
+        100;
       this.localProps.set(this.platform.Characteristic.RotationSpeed, { minStep: 10 });
       this.fanService
         .getCharacteristic(this.platform.Characteristic.RotationSpeed)
@@ -497,11 +495,11 @@ export class MagIQTouchPlatformAccessory {
   async handleFanOnlySet(value: CharacteristicValue) {
     const updates: Partial<RemoteState> = value
       ? {
-        CFanOnlyOrCool: 1,
-        HFanOnly: 1,
-        CFanSpeed: this.state.CFanSpeed || 1,
-        HFanSpeed: this.state.HFanSpeed || 1,
-      }
+          CFanOnlyOrCool: 1,
+          HFanOnly: 1,
+          CFanSpeed: this.state.CFanSpeed || 1,
+          HFanSpeed: this.state.HFanSpeed || 1,
+        }
       : { CFanOnlyOrCool: 0, HFanOnly: 0 };
     await this.updateState(updates);
     this.platform.log.debug('Triggered SET Fan Only On:', value);
@@ -523,11 +521,13 @@ export class MagIQTouchPlatformAccessory {
     if (this.isFanOnly()) {
       return;
     }
-    const updates: Partial<RemoteState> = value ? {
-      FanOrTempControl: 0,
-      CFanSpeed: this.state.CFanSpeed || 1,
-      HFanSpeed: this.state.HFanSpeed || 1,
-    } : { FanOrTempControl: 1 };
+    const updates: Partial<RemoteState> = value
+      ? {
+          FanOrTempControl: 0,
+          CFanSpeed: this.state.CFanSpeed || 1,
+          HFanSpeed: this.state.HFanSpeed || 1,
+        }
+      : { FanOrTempControl: 1 };
     await this.updateState(updates);
     this.platform.log.debug('Triggered SET Temp/Fan Speed On:', value);
   }

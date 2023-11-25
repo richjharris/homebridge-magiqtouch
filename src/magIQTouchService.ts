@@ -70,9 +70,12 @@ export class MagIQTouchService {
   }
 
   public async getState(macAddress: string): Promise<RemoteState> {
-    const mobileInfo = await axios.get<RemoteState>(`${Api}/loadsystemrunning?macAddressId=${encodeURIComponent(macAddress)}`, {
-      headers: await this.getAuthHeaders(),
-    });
+    const mobileInfo = await axios.get<RemoteState>(
+      `${Api}/loadsystemrunning?macAddressId=${encodeURIComponent(macAddress)}`,
+      {
+        headers: await this.getAuthHeaders(),
+      },
+    );
     return mobileInfo.data;
   }
 
@@ -83,7 +86,7 @@ export class MagIQTouchService {
       await axios.put(`${NewApi}/devices/${encodeURIComponent(macAddress)}`, request, {
         headers: await this.getAuthHeaders(),
       });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       this.log.error('Error updating state', err.message || JSON.stringify(err));
     }
