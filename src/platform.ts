@@ -53,12 +53,9 @@ export class MagIQTouchHomebridgePlatform implements DynamicPlatformPlugin {
 
         if (existingAccessory) {
           // the accessory already exists
-          this.log.info('Restoring existing accessory from cache:', existingAccessory.displayName);
-
-          // if you need to update the accessory.context then you should run `api.updatePlatformAccessories`. eg.:
+          this.log.info('Restoring existing accessory from cache:', existingAccessory.displayName, uuid);
           existingAccessory.context.state = await this.magIQTouchService.getState(device.MacAddressId);
           existingAccessory.context.device = device;
-          this.api.updatePlatformAccessories([existingAccessory]);
 
           // create the accessory handler for the restored accessory
           // this is imported from `platformAccessory.ts`

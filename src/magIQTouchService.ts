@@ -27,7 +27,7 @@ export class MagIQTouchService {
     if (this.authToken && this.authToken.expiry > Date.now() / 1000 + 60) {
       return { Authorization: `Bearer ${this.authToken.token}` };
     }
-    this.log.info('Refreshing authentication token', );
+    this.log.info('Refreshing authentication token');
     const authenticationData = {
       Username: this.config.username,
       Password: this.config.password,

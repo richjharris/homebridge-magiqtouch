@@ -16,6 +16,27 @@
         "type": "string",
         "required": true,
         "description": "Password used for the MagIQtouch app"
+      },
+      "fanControlEnabled": {
+        "title": "Fan Speed Control Enabled",
+        "type": "boolean",
+        "default": true,
+        "required": true,
+        "description": "Allow control of fan speed"
+      },
+      "fanOnlyModeEnabled": {
+        "title": "Fan Only Mode Enabled",
+        "type": "boolean",
+        "default": false,
+        "required": true,
+        "description": "Show Fan Only Switch"
+      },
+      "tempFanSwitchEnabled": {
+        "title": "Fan Speed Switch Enabled",
+        "type": "boolean",
+        "default": false,
+        "required": true,
+        "description": "Show Fan Speed Switch that can change between fan speed being set or temperature being set"
       }
     }
   }

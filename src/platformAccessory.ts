@@ -25,6 +25,9 @@ type CharacteristicParam = WithUUID<{
  */
 export class MagIQTouchPlatformAccessory {
   private service: Service;
+  private fanOnlySwitchService?: Service = undefined;
+  private tempFanSwitchService?: Service = undefined;
+  private fanService: Service;
 
   /**
    * These are just used to create a working example
@@ -33,6 +36,9 @@ export class MagIQTouchPlatformAccessory {
   private state: RemoteState;
   private pendingStateUpdates: Partial<RemoteState> = {};
   private macAddress: string;
+  private fanControlEnabled: boolean;
+  private fanOnlyModeEnabled: boolean;
+  private tempFanSwitchEnabled: boolean;
   private readonly localProps: Map<
     CharacteristicParam,
     Pick<CharacteristicProps, 'minValue' | 'maxValue' | 'minStep'>
@@ -44,6 +50,9 @@ export class MagIQTouchPlatformAccessory {
   ) {
     this.macAddress = accessory.context.device.MacAddressId;
     this.state = accessory.context.state;
+    this.fanControlEnabled = this.platform.config.fanControlEnabled ?? true;
+    this.fanOnlyModeEnabled = this.platform.config.fanOnlyModeEnabled ?? false;
+    this.tempFanSwitchEnabled = this.platform.config.tempFanSwitchEnabled ?? false;
     // set accessory information
     this.accessory
       .getService(this.platform.Service.AccessoryInformation)!
@@ -125,13 +134,107 @@ export class MagIQTouchPlatformAccessory {
       .getCharacteristic(this.platform.Characteristic.HeatingThresholdTemperature)
       .onGet(this.handleHeatingThresholdTemperatureGet.bind(this))
       .onSet(this.handleHeatingThresholdTemperatureSet.bind(this));
-    this.service.getCharacteristic(this.platform.Characteristic.RotationSpeed).props.minValue = 0;
-    this.service.getCharacteristic(this.platform.Characteristic.RotationSpeed).props.maxValue = 100;
-    this.localProps.set(this.platform.Characteristic.RotationSpeed, { minStep: 10 });
-    this.service
-      .getCharacteristic(this.platform.Characteristic.RotationSpeed)
-      .onGet(this.handleRotationSpeedGet.bind(this))
-      .onSet(this.handleRotationSpeedSet.bind(this));
+    this.service.setPrimaryService();
+    if ((this.fanOnlyModeEnabled || this.tempFanSwitchEnabled) && this.fanControlEnabled) {
+      // get the FanV2 service if it exists, otherwise create a new FanV2 service
+      this.fanService =
+        this.accessory.getService(this.platform.Service.Fanv2) ||
+        this.accessory.addService(this.platform.Service.Fanv2);
+
+      this.fanService
+        .getCharacteristic(this.platform.Characteristic.Active)
+        .onGet(() => this.platform.Characteristic.Active.ACTIVE)
+        // eslint-disable-next-line @typescript-eslint/no-empty-function
+        .onSet(() => {});
+      this.fanService.getCharacteristic(this.platform.Characteristic.Active).props.validValues = [
+        this.platform.Characteristic.Active.ACTIVE,
+      ];
+
+      // set the service name, this is what is displayed as the default name on the Home app
+      this.fanService.setCharacteristic(this.platform.Characteristic.Name, 'Fan Speed');
+    } else {
+      this.fanService = this.service;
+      const oldFanService = this.accessory.getService(this.platform.Service.Fanv2);
+      if (oldFanService) {
+        this.accessory.removeService(oldFanService);
+      }
+    }
+    if (this.fanControlEnabled) {
+      this.fanService.getCharacteristic(
+        this.platform.Characteristic.RotationSpeed,
+      ).props.minValue = 0;
+      this.fanService.getCharacteristic(
+        this.platform.Characteristic.RotationSpeed,
+      ).props.maxValue = 100;
+      this.localProps.set(this.platform.Characteristic.RotationSpeed, { minStep: 10 });
+      this.fanService
+        .getCharacteristic(this.platform.Characteristic.RotationSpeed)
+        .onGet(this.handleRotationSpeedGet.bind(this))
+        .onSet(this.handleRotationSpeedSet.bind(this));
+    }
+    if (!this.fanControlEnabled || this.fanService !== this.service) {
+      const oldRotationSpeedCharacteristic = this.service.getCharacteristic(
+        this.platform.Characteristic.RotationSpeed,
+      );
+      if (oldRotationSpeedCharacteristic) {
+        this.service.removeCharacteristic(oldRotationSpeedCharacteristic);
+      }
+    }
+
+    if (this.fanOnlyModeEnabled) {
+      // get the Switch service if it exists, otherwise create a new Switch service
+      this.fanOnlySwitchService =
+        this.accessory.getService('Fan Only') ||
+        this.accessory.addService(this.platform.Service.Switch, 'Fan Only', 'FAN_ONLY');
+
+      // set the service name, this is what is displayed as the default name on the Home app
+      // in this example we are using the name we stored in the `accessory.context` in the `discoverDevices` method.
+      this.fanOnlySwitchService.setCharacteristic(this.platform.Characteristic.Name, 'Fan Only');
+
+      // each service must implement at-minimum the "required characteristics" for the given service type
+      // see https://developers.homebridge.io/#/service/Switch
+
+      // create handlers for required characteristics
+      this.fanOnlySwitchService
+        .getCharacteristic(this.platform.Characteristic.On)
+        .onGet(this.handleFanOnlyGet.bind(this))
+        .onSet(this.handleFanOnlySet.bind(this));
+    } else {
+      const oldSwitchService = this.accessory.getService('Fan Only');
+      if (oldSwitchService) {
+        this.accessory.removeService(oldSwitchService);
+      }
+    }
+
+    if (this.tempFanSwitchEnabled) {
+      // get the Switch service if it exists, otherwise create a new Switch service
+      this.tempFanSwitchService =
+        this.accessory.getService('Fan Speed Set') ||
+        this.accessory.addService(this.platform.Service.Switch, 'Fan Speed Set', 'TEMP_FAN');
+
+      // set the service name, this is what is displayed as the default name on the Home app
+      // in this example we are using the name we stored in the `accessory.context` in the `discoverDevices` method.
+      this.tempFanSwitchService.setCharacteristic(
+        this.platform.Characteristic.Name,
+        'Fan Speed Set',
+      );
+
+      // each service must implement at-minimum the "required characteristics" for the given service type
+      // see https://developers.homebridge.io/#/service/Switch
+
+      // create handlers for required characteristics
+      this.tempFanSwitchService
+        .getCharacteristic(this.platform.Characteristic.On)
+        .onGet(this.handleTempFanGet.bind(this))
+        .onSet(this.handleTempFanSet.bind(this));
+    } else {
+      const oldSwitchService = this.accessory.getService('Fan Speed Set');
+      if (oldSwitchService) {
+        this.accessory.removeService(oldSwitchService);
+      }
+    }
+
+    this.platform.api.updatePlatformAccessories([accessory]);
 
     setInterval(async () => {
       try {
@@ -159,7 +262,7 @@ export class MagIQTouchPlatformAccessory {
   /**
    * Handle requests to set the "Active" characteristic
    */
-  handleActiveSet(value: CharacteristicValue) {
+  async handleActiveSet(value: CharacteristicValue) {
     let updates: Partial<RemoteState> | null = {};
     switch (value) {
       case this.platform.Characteristic.Active.ACTIVE:
@@ -176,7 +279,7 @@ export class MagIQTouchPlatformAccessory {
         this.platform.log.error('Unknown active state', value);
     }
     if (updates) {
-      this.updateState(updates);
+      await this.updateState(updates);
     }
     this.platform.log.debug('Triggered SET Active:', value);
   }
@@ -199,16 +302,16 @@ export class MagIQTouchPlatformAccessory {
   /**
    * Handle requests to set the "Target Heater-Cooler State" characteristic
    */
-  handleHeaterCoolerStateSet(value: CharacteristicValue) {
+  async handleHeaterCoolerStateSet(value: CharacteristicValue) {
     this.platform.log.debug('Triggered SET CurrentHeaterCoolerState:', value);
 
     let updates: Partial<RemoteState> = {};
     switch (value) {
       case this.platform.Characteristic.CurrentHeaterCoolerState.HEATING:
-        updates = { SystemOn: 1, HFanOnly: 0, HRunning: 1, EvapCRunning: 0 };
+        updates = { SystemOn: 1, HRunning: 1, EvapCRunning: 0 };
         break;
       case this.platform.Characteristic.CurrentHeaterCoolerState.COOLING:
-        updates = { SystemOn: 1, CFanOnlyOrCool: 0, HRunning: 0, EvapCRunning: 1 };
+        updates = { SystemOn: 1, HRunning: 0, EvapCRunning: 1 };
         break;
       case this.platform.Characteristic.Active.INACTIVE:
         updates = { SystemOn: 0 };
@@ -217,7 +320,7 @@ export class MagIQTouchPlatformAccessory {
         this.platform.log.error('Unknown active state', value);
         return;
     }
-    this.updateState(updates);
+    await this.updateState(updates);
     this.platform.log.debug('Triggered SET Active:', value);
   }
 
@@ -265,7 +368,7 @@ export class MagIQTouchPlatformAccessory {
   /**
    * Handle requests to set the "Cooling Threshold Temperature" characteristic
    */
-  handleCoolingThresholdTemperatureSet(value: CharacteristicValue) {
+  async handleCoolingThresholdTemperatureSet(value: CharacteristicValue) {
     this.platform.log.debug('Triggered SET CoolingTemperatureThreshold:', value);
 
     if (!isNumber(value)) {
@@ -278,8 +381,11 @@ export class MagIQTouchPlatformAccessory {
       'CoolingThresholdTemperature Set',
     );
 
-    this.updateState({ FanOrTempControl: 1, CTemp: value });
-    this.service.getCharacteristic(this.platform.Characteristic.RotationSpeed).updateValue(0);
+    await this.updateState({ FanOrTempControl: 1, CTemp: value, CFanOnlyOrCool: 0 });
+    this.fanService.getCharacteristic(this.platform.Characteristic.RotationSpeed).updateValue(0);
+    this.fanOnlySwitchService
+      ?.getCharacteristic(this.platform.Characteristic.On)
+      .updateValue(false);
     this.platform.log.debug('Triggered SET Cooling Temperature:', value);
   }
 
@@ -299,7 +405,7 @@ export class MagIQTouchPlatformAccessory {
   /**
    * Handle requests to set the "Heating Threshold Temperature" characteristic
    */
-  handleHeatingThresholdTemperatureSet(value: CharacteristicValue) {
+  async handleHeatingThresholdTemperatureSet(value: CharacteristicValue) {
     this.platform.log.debug('Triggered SET HeatingThresholdTemperature:', value);
     if (!isNumber(value)) {
       this.platform.log.error('Unknown temperature type', value);
@@ -310,8 +416,15 @@ export class MagIQTouchPlatformAccessory {
       this.platform.Characteristic.HeatingThresholdTemperature,
       'HeatingThresholdTemperature Set',
     );
-    this.updateState({ FanOrTempControl: 1, HTemp: value });
-    this.service.getCharacteristic(this.platform.Characteristic.RotationSpeed).updateValue(0);
+    await this.updateState({ FanOrTempControl: 1, HTemp: value, HFanOnly: 0 });
+    this.fanOnlySwitchService
+      ?.getCharacteristic(this.platform.Characteristic.On)
+      .updateValue(false);
+    this.fanService.getCharacteristic(this.platform.Characteristic.RotationSpeed).updateValue(0);
+    this.fanOnlySwitchService
+      ?.getCharacteristic(this.platform.Characteristic.On)
+      .updateValue(false);
+
     this.platform.log.debug('Triggered SET Heating Threshold Temperature:', value);
   }
 
@@ -329,6 +442,7 @@ export class MagIQTouchPlatformAccessory {
       value,
       this.platform.Characteristic.RotationSpeed,
       'RotationSpeed Get',
+      this.fanService,
     );
 
     this.platform.log.info('Triggered GET Rotation Speed:', value, this.state.CFanSpeed);
@@ -338,7 +452,7 @@ export class MagIQTouchPlatformAccessory {
   /**
    * Handle requests to set the "Rotation Speed" characteristic
    */
-  handleRotationSpeedSet(value: CharacteristicValue) {
+  async handleRotationSpeedSet(value: CharacteristicValue) {
     this.platform.log.info('Triggered SET RotationSpeed:', value);
 
     if (!isNumber(value)) {
@@ -349,16 +463,73 @@ export class MagIQTouchPlatformAccessory {
       value,
       this.platform.Characteristic.RotationSpeed,
       'RotationSpeed Set',
+      this.fanService,
     );
+
+    if (
+      this.fanOnlySwitchService?.getCharacteristic(this.platform.Characteristic.On).value &&
+      value < 10
+    ) {
+      value = 10;
+    }
 
     const fanSpeed = Math.round(value / 10);
 
-    this.updateState({
+    await this.updateState({
       FanOrTempControl: fanSpeed === 0 ? 1 : 0,
       CFanSpeed: fanSpeed,
       HFanSpeed: fanSpeed,
     });
     this.platform.log.info('Triggered SET Rotation Speed:', fanSpeed);
+  }
+
+  /**
+   * Handle requests to get the current value of the Fan Only "On" characteristic
+   */
+  handleFanOnlyGet() {
+    this.platform.log.debug('Triggered GET Fan Only On');
+    return this.isFanOnly();
+  }
+
+  /**
+   * Handle requests to set the Fan Only "On" characteristic
+   */
+  async handleFanOnlySet(value: CharacteristicValue) {
+    const updates: Partial<RemoteState> = value
+      ? {
+        CFanOnlyOrCool: 1,
+        HFanOnly: 1,
+        CFanSpeed: this.state.CFanSpeed || 1,
+        HFanSpeed: this.state.HFanSpeed || 1,
+      }
+      : { CFanOnlyOrCool: 0, HFanOnly: 0 };
+    await this.updateState(updates);
+    this.platform.log.debug('Triggered SET Fan Only On:', value);
+  }
+
+  /**
+   * Handle requests to get the current value of the Temp/Fan Speed "On" characteristic
+   */
+  handleTempFanGet() {
+    this.platform.log.debug('Triggered GET Fan Only On');
+
+    return this.isFanOnly() || this.state.FanOrTempControl === 0;
+  }
+
+  /**
+   * Handle requests to set the Temp/Fan Speed "On" characteristic
+   */
+  async handleTempFanSet(value: CharacteristicValue) {
+    if (this.isFanOnly()) {
+      return;
+    }
+    const updates: Partial<RemoteState> = value ? {
+      FanOrTempControl: 0,
+      CFanSpeed: this.state.CFanSpeed || 1,
+      HFanSpeed: this.state.HFanSpeed || 1,
+    } : { FanOrTempControl: 1 };
+    await this.updateState(updates);
+    this.platform.log.debug('Triggered SET Temp/Fan Speed On:', value);
   }
 
   /**
@@ -368,9 +539,10 @@ export class MagIQTouchPlatformAccessory {
     value: number,
     characteristic: CharacteristicParam,
     description: string,
+    service: Service = this.service,
   ): number {
     const { minValue, maxValue, minStep } = {
-      ...this.service.getCharacteristic(characteristic).props,
+      ...service.getCharacteristic(characteristic).props,
       ...this.localProps.get(characteristic),
     };
 
@@ -398,11 +570,19 @@ export class MagIQTouchPlatformAccessory {
     return value;
   }
 
-  private updateState(updates: Partial<RemoteState>) {
+  private async updateState(updates: Partial<RemoteState>) {
     Object.assign(this.pendingStateUpdates, updates);
-    this.platform.magIQTouchService.updateState(this.macAddress, {
+    await this.platform.magIQTouchService.updateState(this.macAddress, {
       ...this.state,
       ...this.pendingStateUpdates,
     });
+  }
+
+  private isFanOnly(): boolean {
+    const state = { ...this.state, ...this.pendingStateUpdates };
+    return (
+      (state.EvapCRunning === 1 && state.CFanOnlyOrCool === 1) ||
+      (state.HRunning === 1 && state.HFanOnly === 1)
+    );
   }
 }
