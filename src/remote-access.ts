@@ -176,6 +176,34 @@ export interface RemoteAccessRequest {
   TouchCount: number;
 }
 
+interface SystemDeviceCommon {
+  MinimumTemperature: number;
+  MaximumTemperature: number;
+}
+
+export interface SystemDetails {
+  NoOfZones: number;
+  NoOfZonesControl: number;
+  HeaterInSystem: number;
+  AOCInverterInSystem: number;
+  AOCFixedInSystem: number;
+  NoOfEVAPInSystem: number;
+  Heater: SystemDeviceCommon & { AOCInstalled: number };
+  AOCFixed: SystemDeviceCommon;
+  AOCInverter: SystemDeviceCommon;
+  EVAPCooler: SystemDeviceCommon;
+  ZoneName1: string;
+  ZoneName2: string;
+  ZoneName3: string;
+  ZoneName4: string;
+  ZoneName5: string;
+  ZoneName6: string;
+  ZoneName7: string;
+  ZoneName8: string;
+  ZoneName9: string;
+  ZoneName10: string;
+}
+
 export function newStateRequest(state: RemoteState): RemoteAccessRequest {
   return {
     SerialNo: state.MacAddressId,

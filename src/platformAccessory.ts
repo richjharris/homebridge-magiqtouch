@@ -9,6 +9,7 @@ import {
 
 import { MagIQTouchHomebridgePlatform } from './platform';
 import { RemoteState } from './remote-access';
+import { MagIQTouchSupportedModes } from './magIQTouchService';
 
 function isNumber(val: unknown): val is number {
   return Number.isFinite(val);
@@ -35,6 +36,7 @@ export class MagIQTouchPlatformAccessory {
    */
   private state: RemoteState;
   private pendingStateUpdates: Partial<RemoteState> = {};
+  private supportedModes: MagIQTouchSupportedModes;
   private macAddress: string;
   private fanControlEnabled: boolean;
   private fanOnlyModeEnabled: boolean;
@@ -50,6 +52,7 @@ export class MagIQTouchPlatformAccessory {
   ) {
     this.macAddress = accessory.context.device.MacAddressId;
     this.state = accessory.context.state;
+    this.supportedModes = accessory.context.supportedModes;
     this.fanControlEnabled = this.platform.config.fanControlEnabled ?? true;
     this.fanOnlyModeEnabled = this.platform.config.fanOnlyModeEnabled ?? false;
     this.tempFanSwitchEnabled = this.platform.config.tempFanSwitchEnabled ?? false;
@@ -86,12 +89,18 @@ export class MagIQTouchPlatformAccessory {
       .onGet(this.handleHeaterCoolerStateGet.bind(this))
       .onSet(this.handleHeaterCoolerStateGet.bind(this));
 
+    const validHeaterCoolerStateValues = [
+      ...(this.supportedModes.heating
+        ? [this.platform.Characteristic.TargetHeaterCoolerState.HEAT]
+        : []),
+      ...(this.supportedModes.cooling
+        ? [this.platform.Characteristic.TargetHeaterCoolerState.COOL]
+        : []),
+    ];
     this.service.getCharacteristic(
       this.platform.Characteristic.TargetHeaterCoolerState,
-    ).props.validValues = [
-      this.platform.Characteristic.TargetHeaterCoolerState.HEAT,
-      this.platform.Characteristic.TargetHeaterCoolerState.COOL,
-    ];
+    ).props.validValues = validHeaterCoolerStateValues;
+    this.platform.log.debug('Valid HeaterCoolerState Values', validHeaterCoolerStateValues);
     this.service.getCharacteristic(
       this.platform.Characteristic.TargetHeaterCoolerState,
     ).props.minValue = this.platform.Characteristic.TargetHeaterCoolerState.HEAT;
@@ -108,34 +117,57 @@ export class MagIQTouchPlatformAccessory {
       .getCharacteristic(this.platform.Characteristic.CurrentTemperature)
       .onGet(this.handleCurrentTemperatureGet.bind(this));
 
-    this.service.getCharacteristic(
-      this.platform.Characteristic.CoolingThresholdTemperature,
-    ).props.minValue = 19;
-    this.service.getCharacteristic(
-      this.platform.Characteristic.CoolingThresholdTemperature,
-    ).props.maxValue = 28;
-    this.service.getCharacteristic(
-      this.platform.Characteristic.CoolingThresholdTemperature,
-    ).props.minStep = 1;
-    this.service
-      .getCharacteristic(this.platform.Characteristic.CoolingThresholdTemperature)
-      .onGet(this.handleCoolingThresholdTemperatureGet.bind(this))
-      .onSet(this.handleCoolingThresholdTemperatureSet.bind(this));
-    this.service.getCharacteristic(
-      this.platform.Characteristic.HeatingThresholdTemperature,
-    ).props.minValue = 18;
-    this.service.getCharacteristic(
-      this.platform.Characteristic.HeatingThresholdTemperature,
-    ).props.maxValue = 28;
-    this.service.getCharacteristic(
-      this.platform.Characteristic.HeatingThresholdTemperature,
-    ).props.minStep = 1;
-    this.service
-      .getCharacteristic(this.platform.Characteristic.HeatingThresholdTemperature)
-      .onGet(this.handleHeatingThresholdTemperatureGet.bind(this))
-      .onSet(this.handleHeatingThresholdTemperatureSet.bind(this));
+    if (this.supportedModes.cooling) {
+      this.platform.log.debug('Cooling supported', this.supportedModes.cooling);
+      this.service.getCharacteristic(
+        this.platform.Characteristic.CoolingThresholdTemperature,
+      ).props.minValue = this.supportedModes.cooling.minimumTemperature;
+      this.service.getCharacteristic(
+        this.platform.Characteristic.CoolingThresholdTemperature,
+      ).props.maxValue = this.supportedModes.cooling.maximumTemperature;
+      this.service.getCharacteristic(
+        this.platform.Characteristic.CoolingThresholdTemperature,
+      ).props.minStep = 1;
+      this.service
+        .getCharacteristic(this.platform.Characteristic.CoolingThresholdTemperature)
+        .onGet(this.handleCoolingThresholdTemperatureGet.bind(this))
+        .onSet(this.handleCoolingThresholdTemperatureSet.bind(this));
+    } else {
+      this.platform.log.debug('Cooling unsupported');
+      const oldCoolingThresholdTemperatureCharacteristic = this.service.getCharacteristic(
+        this.platform.Characteristic.CoolingThresholdTemperature,
+      );
+      if (oldCoolingThresholdTemperatureCharacteristic) {
+        this.service.removeCharacteristic(oldCoolingThresholdTemperatureCharacteristic);
+      }
+    }
+    if (this.supportedModes.heating) {
+      this.platform.log.debug('Heating supported', this.supportedModes.heating);
+      this.service.getCharacteristic(
+        this.platform.Characteristic.HeatingThresholdTemperature,
+      ).props.minValue = this.supportedModes.heating.minimumTemperature;
+      this.service.getCharacteristic(
+        this.platform.Characteristic.HeatingThresholdTemperature,
+      ).props.maxValue = this.supportedModes.heating.maximumTemperature;
+      this.service.getCharacteristic(
+        this.platform.Characteristic.HeatingThresholdTemperature,
+      ).props.minStep = 1;
+      this.service
+        .getCharacteristic(this.platform.Characteristic.HeatingThresholdTemperature)
+        .onGet(this.handleHeatingThresholdTemperatureGet.bind(this))
+        .onSet(this.handleHeatingThresholdTemperatureSet.bind(this));
+    } else {
+      this.platform.log.debug('Heating unsupported');
+      const oldHeatingThresholdTemperatureCharacteristic = this.service.getCharacteristic(
+        this.platform.Characteristic.HeatingThresholdTemperature,
+      );
+      if (oldHeatingThresholdTemperatureCharacteristic) {
+        this.service.removeCharacteristic(oldHeatingThresholdTemperatureCharacteristic);
+      }
+    }
     this.service.setPrimaryService();
     if ((this.fanOnlyModeEnabled || this.tempFanSwitchEnabled) && this.fanControlEnabled) {
+      this.platform.log.debug('Creating fan service');
       // get the FanV2 service if it exists, otherwise create a new FanV2 service
       this.fanService =
         this.accessory.getService(this.platform.Service.Fanv2) ||
@@ -153,6 +185,7 @@ export class MagIQTouchPlatformAccessory {
       // set the service name, this is what is displayed as the default name on the Home app
       this.fanService.setCharacteristic(this.platform.Characteristic.Name, 'Fan Speed');
     } else {
+      this.platform.log.debug('Removing fan service');
       this.fanService = this.service;
       const oldFanService = this.accessory.getService(this.platform.Service.Fanv2);
       if (oldFanService) {
@@ -160,6 +193,7 @@ export class MagIQTouchPlatformAccessory {
       }
     }
     if (this.fanControlEnabled) {
+      this.platform.log.debug('Fan control enabled');
       this.fanService.getCharacteristic(this.platform.Characteristic.RotationSpeed).props.minValue =
         0;
       this.fanService.getCharacteristic(this.platform.Characteristic.RotationSpeed).props.maxValue =
@@ -288,10 +322,10 @@ export class MagIQTouchPlatformAccessory {
   handleHeaterCoolerStateGet() {
     this.platform.log.debug('Triggered GET CurrentHeaterCoolerState');
 
-    if (this.state.SystemOn === 1 && this.state.HRunning) {
+    if (this.state.SystemOn === 1 && this.isHeatRunning()) {
       return this.platform.Characteristic.CurrentHeaterCoolerState.HEATING;
     }
-    if (this.state.SystemOn === 1 && this.state.EvapCRunning) {
+    if (this.state.SystemOn === 1 && this.isCoolingRunning()) {
       return this.platform.Characteristic.CurrentHeaterCoolerState.COOLING;
     }
     return this.platform.Characteristic.CurrentHeaterCoolerState.INACTIVE;
@@ -306,10 +340,28 @@ export class MagIQTouchPlatformAccessory {
     let updates: Partial<RemoteState> = {};
     switch (value) {
       case this.platform.Characteristic.CurrentHeaterCoolerState.HEATING:
-        updates = { SystemOn: 1, HRunning: 1, EvapCRunning: 0 };
+        updates = {
+          SystemOn: 1,
+          HRunning: 0,
+          EvapCRunning: 0,
+          FAOCRunning: 0,
+          IAOCRunning: 0,
+          ...(this.supportedModes.heating
+            ? { [this.supportedModes.heating.temperatureKey]: 1 }
+            : {}),
+        };
         break;
       case this.platform.Characteristic.CurrentHeaterCoolerState.COOLING:
-        updates = { SystemOn: 1, HRunning: 0, EvapCRunning: 1 };
+        updates = {
+          SystemOn: 1,
+          HRunning: 0,
+          EvapCRunning: 0,
+          FAOCRunning: 0,
+          IAOCRunning: 0,
+          ...(this.supportedModes.cooling
+            ? { [this.supportedModes.cooling.temperatureKey]: 1 }
+            : {}),
+        };
         break;
       case this.platform.Characteristic.Active.INACTIVE:
         updates = { SystemOn: 0 };
@@ -328,7 +380,7 @@ export class MagIQTouchPlatformAccessory {
   handleTargetHeaterCoolerStateGet() {
     this.platform.log.debug('Triggered GET TargetHeaterCoolerState');
 
-    if (this.state.HRunning) {
+    if (this.isHeatRunning()) {
       return this.platform.Characteristic.TargetHeaterCoolerState.HEAT;
     }
     return this.platform.Characteristic.TargetHeaterCoolerState.COOL;
@@ -433,7 +485,7 @@ export class MagIQTouchPlatformAccessory {
     this.platform.log.debug('Triggered GET RotationSpeed');
 
     let value = this.state.CFanSpeed * 10;
-    if (this.state.HRunning) {
+    if (this.isHeatRunning()) {
       value = this.state.HFanSpeed * 10;
     }
     value = this.normaliseValue(
@@ -566,7 +618,7 @@ export class MagIQTouchPlatformAccessory {
         value += minStep;
       }
     }
-    this.platform.log.debug(description, value, this.state);
+    this.platform.log.debug(description, value, { minValue, maxValue, minStep }, this.state);
     return value;
   }
 
@@ -581,8 +633,22 @@ export class MagIQTouchPlatformAccessory {
   private isFanOnly(): boolean {
     const state = { ...this.state, ...this.pendingStateUpdates };
     return (
-      (state.EvapCRunning === 1 && state.CFanOnlyOrCool === 1) ||
-      (state.HRunning === 1 && state.HFanOnly === 1)
+      (this.isCoolingRunning(state) && state.CFanOnlyOrCool === 1) ||
+      (this.isHeatRunning(state) && state.HFanOnly === 1)
+    );
+  }
+
+  private isHeatRunning(state = this.state): boolean {
+    return (
+      (this.supportedModes.heating || false) &&
+      state[this.supportedModes.heating.temperatureKey] === 1
+    );
+  }
+
+  private isCoolingRunning(state = this.state): boolean {
+    return (
+      (this.supportedModes.cooling || false) &&
+      state[this.supportedModes.cooling.temperatureKey] === 1
     );
   }
 }

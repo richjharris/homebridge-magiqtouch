@@ -68,6 +68,9 @@ export class MagIQTouchHomebridgePlatform implements DynamicPlatformPlugin {
           existingAccessory.context.state = await this.magIQTouchService.getState(
             device.MacAddressId,
           );
+          existingAccessory.context.supportedModes = await this.magIQTouchService.getSupportedModes(
+            device.MacAddressId,
+          );
           existingAccessory.context.device = device;
 
           // create the accessory handler for the restored accessory
@@ -89,6 +92,9 @@ export class MagIQTouchHomebridgePlatform implements DynamicPlatformPlugin {
           // the `context` property can be used to store any data about the accessory you may need
           accessory.context.device = device;
           accessory.context.state = await this.magIQTouchService.getState(device.MacAddressId);
+          accessory.context.supportedModes = await this.magIQTouchService.getSupportedModes(
+            device.MacAddressId,
+          );
 
           // create the accessory handler for the newly create accessory
           // this is imported from `platformAccessory.ts`
