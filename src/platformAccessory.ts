@@ -175,11 +175,12 @@ export class MagIQTouchPlatformAccessory {
 
       this.fanService
         .getCharacteristic(this.platform.Characteristic.Active)
-        .onGet(() => this.platform.Characteristic.Active.ACTIVE)
+        .onGet(this.handleActiveGet.bind(this))
         // eslint-disable-next-line @typescript-eslint/no-empty-function
         .onSet(() => {});
       this.fanService.getCharacteristic(this.platform.Characteristic.Active).props.validValues = [
         this.platform.Characteristic.Active.ACTIVE,
+        this.platform.Characteristic.Active.INACTIVE,
       ];
 
       // set the service name, this is what is displayed as the default name on the Home app
@@ -312,6 +313,9 @@ export class MagIQTouchPlatformAccessory {
     }
     if (updates) {
       await this.updateState(updates);
+    }
+    if (this.service !== this.fanService) {
+      this.fanService.getCharacteristic(this.platform.Characteristic.Active).updateValue(value);
     }
     this.platform.log.debug('Triggered SET Active:', value);
   }
