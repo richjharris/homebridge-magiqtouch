@@ -1,5 +1,4 @@
 {
-  "private": true,
   "displayName": "MagIQTouch Homebridge Plugin",
   "name": "homebridge-magiqtouch",
   "version": "1.0.0",
